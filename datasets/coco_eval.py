@@ -17,6 +17,8 @@ from pycocotools.coco import COCO
 import pycocotools.mask as mask_util
 
 from util.misc import all_gather
+from datasets.rbbox_eval import RBBoxCOCOeval
+from datasets.rbbox_eval import loadRes as loadRes_rbbox
 
 
 class CocoEvaluator(object):
@@ -28,7 +30,10 @@ class CocoEvaluator(object):
         self.iou_types = iou_types
         self.coco_eval = {}
         for iou_type in iou_types:
-            self.coco_eval[iou_type] = COCOeval(coco_gt, iouType=iou_type)
+            if iou_type == 'bbox':
+                self.coco_eval['bbox'] = RBBoxCOCOeval(coco_gt, iouType='bbox')
+            else:
+                self.coco_eval[iou_type] = COCOeval(coco_gt, iouType=iou_type)
 
         self.img_ids = []
         self.eval_imgs = {k: [] for k in iou_types}
@@ -43,7 +48,10 @@ class CocoEvaluator(object):
             # suppress pycocotools prints
             with open(os.devnull, 'w') as devnull:
                 with contextlib.redirect_stdout(devnull):
-                    coco_dt = COCO.loadRes(self.coco_gt, results) if results else COCO()
+                    if iou_type == 'bbox':
+                        coco_dt = loadRes_rbbox(self.coco_gt, results) if results else COCO()
+                    else:
+                        coco_dt = COCO.loadRes(self.coco_gt, results) if results else COCO()
             coco_eval = self.coco_eval[iou_type]
 
             coco_eval.cocoDt = coco_dt
@@ -82,8 +90,7 @@ class CocoEvaluator(object):
             if len(prediction) == 0:
                 continue
 
-            boxes = prediction["boxes"]
-            boxes = convert_to_xywh(boxes).tolist()
+            boxes = prediction["boxes"].tolist()
             scores = prediction["scores"].tolist()
             labels = prediction["labels"].tolist()
 

@@ -2,8 +2,83 @@
 """
 Utilities for bounding box manipulation and GIoU.
 """
+import math
+
 import torch
 from torchvision.ops.boxes import box_area
+
+from .poly_iou import poly_iou
+
+
+def add_angle(boxes, zero_angle=False):
+    assert boxes.size(-1) == 4
+    if zero_angle:
+        angle = boxes.new_zeros(len(boxes), 1)
+    else:
+        ox, oy = (boxes[..., :2] - 0.5).split(1, dim=-1)
+        angle = torch.atan(ox / -oy) * (180 / math.pi)
+    return torch.cat((boxes, angle), dim=-1)
+
+
+def rbbox_to_poly(rbboxes):
+    xc, yc, w, h, alpha = rbboxes.unbind(dim=-1)
+    p1 = [- w / 2, - h / 2]
+    p2 = [  w / 2, - h / 2]
+    p3 = [  w / 2,   h / 2]
+    p4 = [- w / 2,   h / 2]
+
+    alpha_rad = -alpha * (math.pi / 180)
+    cos_theta, sin_theta = torch.cos(alpha_rad), torch.sin(alpha_rad)
+
+    rp1 = [p1[0] * cos_theta + p1[1] * sin_theta + xc,
+           p1[1] * cos_theta - p1[0] * sin_theta + yc]
+    rp2 = [p2[0] * cos_theta + p2[1] * sin_theta + xc,
+           p2[1] * cos_theta - p2[0] * sin_theta + yc]
+    rp3 = [p3[0] * cos_theta + p3[1] * sin_theta + xc,
+           p3[1] * cos_theta - p3[0] * sin_theta + yc]
+    rp4 = [p4[0] * cos_theta + p4[1] * sin_theta + xc,
+           p4[1] * cos_theta - p4[0] * sin_theta + yc]
+    poly = rp1 + rp2 + rp3 + rp4
+
+    return torch.stack(poly, dim=-1)
+
+
+def generalized_rbbox_iou(boxes1, boxes2):
+    """
+    Generalized IoU from https://giou.stanford.edu/
+
+    The boxes should be in [xc, yc, w, h, a] format
+
+    Returns a [N, M] pairwise matrix, where N = len(boxes1)
+    and M = len(boxes2)
+    """
+    N, M = len(boxes1), len(boxes2)
+    if N * M == 0:
+        return boxes1.new_zeros(N, M)
+
+    area1 = boxes1[:, 2] * boxes1[:, 3]
+    area2 = boxes2[:, 2] * boxes2[:, 3]
+
+    # degenerate boxes gives inf / nan results
+    # so do an early check
+    assert (boxes1[:, 2:4] >= 0).all()
+    assert (boxes2[:, 2:4] >= 0).all()
+
+    poly1 = rbbox_to_poly(boxes1)
+    poly2 = rbbox_to_poly(boxes2)
+
+    iou = poly_iou(poly1, poly2)
+    union = (area1[:, None] + area2[None]) / (iou + 1)
+
+    poly1 = poly1.view(-1, 4, 2)
+    poly2 = poly2.view(-1, 4, 2)
+    lt = torch.min(poly1.min(dim=1)[0][:, None], poly2.min(dim=1)[0][None])
+    rb = torch.max(poly1.max(dim=1)[0][:, None], poly2.max(dim=1)[0][None])
+
+    wh = (rb - lt).clamp(min=0)  # [N,M,2]
+    area = wh[:, :, 0] * wh[:, :, 1]
+
+    return iou - (area - union) / area
 
 
 def box_cxcywh_to_xyxy(x):

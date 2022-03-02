@@ -150,14 +150,16 @@ class SetCriterion(nn.Module):
         src_boxes = outputs['pred_boxes'][idx]
         target_boxes = torch.cat([t['boxes'][i] for t, (_, i) in zip(targets, indices)], dim=0)
 
-        loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction='none')
+        src_boxes = box_ops.add_angle(src_boxes)
+
+        loss_bbox = F.l1_loss(src_boxes[..., :4], target_boxes[..., :4], reduction='none')
 
         losses = {}
         losses['loss_bbox'] = loss_bbox.sum() / num_boxes
 
-        loss_giou = 1 - torch.diag(box_ops.generalized_box_iou(
-            box_ops.box_cxcywh_to_xyxy(src_boxes),
-            box_ops.box_cxcywh_to_xyxy(target_boxes)))
+        loss_giou = 1 - torch.diag(box_ops.generalized_rbbox_iou(
+            src_boxes,
+            target_boxes))
         losses['loss_giou'] = loss_giou.sum() / num_boxes
         return losses
 
@@ -274,11 +276,11 @@ class PostProcess(nn.Module):
         prob = F.softmax(out_logits, -1)
         scores, labels = prob[..., :-1].max(-1)
 
-        # convert to [x0, y0, x1, y1] format
-        boxes = box_ops.box_cxcywh_to_xyxy(out_bbox)
+        # convert to [xc, yc, w, h, a] format
+        boxes = box_ops.add_angle(out_bbox)
         # and from relative [0, 1] to absolute [0, height] coordinates
         img_h, img_w = target_sizes.unbind(1)
-        scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
+        scale_fct = torch.stack([img_w, img_h, img_w, img_h, torch.ones_like(img_w)], dim=1)
         boxes = boxes * scale_fct[:, None, :]
 
         results = [{'scores': s, 'labels': l, 'boxes': b} for s, l, b in zip(scores, labels, boxes)]
@@ -315,6 +317,8 @@ def build(args):
         # for panoptic, we just add a num_classes that is large enough to hold
         # max_obj_id + 1, but the exact value doesn't really matter
         num_classes = 250
+    if args.dataset_file == 'loaf':
+        num_classes = 2
     device = torch.device(args.device)
 
     backbone = build_backbone(args)
