@@ -9,14 +9,27 @@ from torchvision.ops.boxes import box_area
 
 from .poly_iou import poly_iou
 
+import sys
+sys.path.insert(0, 'Rotated_IoU')
+from Rotated_IoU.oriented_iou_loss import cal_giou
 
-def add_angle(boxes, zero_angle=False):
+
+@torch.no_grad()
+def get_angle(boxes, is_rad=True):
+    assert boxes.size(-1) == 4
+    ox, oy = (boxes[..., :2] - 0.5).split(1, dim=-1)
+    angle = torch.atan(ox / -oy)
+    if not is_rad:
+        angle *= 180 / math.pi
+    return angle
+
+
+def add_angle(boxes, zero_angle=False, is_rad=True):
     assert boxes.size(-1) == 4
     if zero_angle:
         angle = boxes.new_zeros(len(boxes), 1)
     else:
-        ox, oy = (boxes[..., :2] - 0.5).split(1, dim=-1)
-        angle = torch.atan(ox / -oy) * (180 / math.pi)
+        angle = get_angle(boxes, is_rad=is_rad)
     return torch.cat((boxes, angle), dim=-1)
 
 
@@ -27,7 +40,7 @@ def rbbox_to_poly(rbboxes):
     p3 = [  w / 2,   h / 2]
     p4 = [- w / 2,   h / 2]
 
-    alpha_rad = -alpha * (math.pi / 180)
+    alpha_rad = -alpha
     cos_theta, sin_theta = torch.cos(alpha_rad), torch.sin(alpha_rad)
 
     rp1 = [p1[0] * cos_theta + p1[1] * sin_theta + xc,
@@ -78,7 +91,7 @@ def generalized_rbbox_iou(boxes1, boxes2):
     wh = (rb - lt).clamp(min=0)  # [N,M,2]
     area = wh[:, :, 0] * wh[:, :, 1]
 
-    return iou - (area - union) / area
+    return iou - (area - union) / area, iou
 
 
 def box_cxcywh_to_xyxy(x):

@@ -157,9 +157,13 @@ class SetCriterion(nn.Module):
         losses = {}
         losses['loss_bbox'] = loss_bbox.sum() / num_boxes
 
-        loss_giou = 1 - torch.diag(box_ops.generalized_rbbox_iou(
-            src_boxes,
-            target_boxes))
+        if target_boxes.size(0) == 0:
+            loss_giou = src_boxes.new_empty(0)
+        else:
+            loss_giou = box_ops.cal_giou(
+                src_boxes.unsqueeze(0),
+                target_boxes.unsqueeze(0),
+                enclosing_type='aligned')[0].squeeze(0)
         losses['loss_giou'] = loss_giou.sum() / num_boxes
         return losses
 
@@ -318,7 +322,7 @@ def build(args):
         # max_obj_id + 1, but the exact value doesn't really matter
         num_classes = 250
     if args.dataset_file == 'loaf':
-        num_classes = 2
+        num_classes = 1
     device = torch.device(args.device)
 
     backbone = build_backbone(args)

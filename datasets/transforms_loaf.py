@@ -2,6 +2,7 @@
 """
 Transforms and data augmentation for both image + bbox.
 """
+import math
 import random
 
 import torch
@@ -127,7 +128,7 @@ class Normalize(object):
         if "boxes" in target:
             h, w = image.shape[-2:]
             boxes = target["boxes"]
-            target["boxes"] = boxes / torch.tensor([w, h, w, h, 1], dtype=torch.float32)
+            target["boxes"] = boxes / torch.tensor([w, h, w, h, 180 / math.pi], dtype=torch.float32)
         return image, target
 
 

@@ -6,7 +6,7 @@ import torch
 from scipy.optimize import linear_sum_assignment
 from torch import nn
 
-from util.box_ops import add_angle, generalized_rbbox_iou
+from util.box_ops import add_angle, cal_giou
 
 
 class HungarianMatcher(nn.Module):
@@ -73,7 +73,14 @@ class HungarianMatcher(nn.Module):
         cost_bbox = torch.cdist(out_bbox[..., :4], tgt_bbox[..., :4], p=1)
 
         # Compute the giou cost betwen boxes
-        cost_giou = -generalized_rbbox_iou(out_bbox, tgt_bbox)
+        N, M = out_bbox.size(0), tgt_bbox.size(0)
+        if N * M == 0:
+            cost_giou = out_bbox.new_empty(N, M)
+        else:
+            cost_giou = cal_giou(
+                out_bbox.unsqueeze(1).expand(-1, M, -1),
+                tgt_bbox.unsqueeze(0).expand(N, -1, -1),
+                enclosing_type='aligned')[0] - 1
 
         # Final cost matrix
         C = self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou

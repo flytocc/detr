@@ -27,6 +27,8 @@ class CocoEvaluator(object):
         coco_gt = copy.deepcopy(coco_gt)
         self.coco_gt = coco_gt
 
+        self.cats_map = {new_id: cat_id for new_id, cat_id in enumerate(self.coco_gt.getCatIds())}
+
         self.iou_types = iou_types
         self.coco_eval = {}
         for iou_type in iou_types:
@@ -92,7 +94,7 @@ class CocoEvaluator(object):
 
             boxes = prediction["boxes"].tolist()
             scores = prediction["scores"].tolist()
-            labels = prediction["labels"].tolist()
+            labels = [self.cats_map[cat_id] for cat_id in prediction["labels"].tolist()]
 
             coco_results.extend(
                 [

@@ -119,13 +119,13 @@ def make_loaf_transforms(image_set):
     if image_set == 'train':
         return T.Compose([
             T.RandomHorizontalFlip(),
-            T.RandomResize([736], max_size=1333),
+            T.RandomResize([800], max_size=1333),
             normalize,
         ])
 
     if image_set == 'val':
         return T.Compose([
-            T.RandomResize([736], max_size=1333),
+            T.RandomResize([800], max_size=1333),
             normalize,
         ])
 
@@ -137,8 +137,8 @@ def build(image_set, args):
     assert root.exists(), f'provided COCO path {root} does not exist'
     mode = 'instances'
     PATHS = {
-        "train": (root / "images_736/train", root / "annotations" / f'{mode}_train.json'),
-        "val": (root / "images_736/val", root / "annotations" / f'{mode}_val.json'),
+        "train": (root / "images/train", root / "annotations/original_resolution" / f'{mode}_train.json'),
+        "val": (root / "images/val", root / "annotations/original_resolution" / f'{mode}_val.json'),
     }
 
     img_folder, ann_file = PATHS[image_set]

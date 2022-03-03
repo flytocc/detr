@@ -18,7 +18,8 @@ class CocoDetection(torchvision.datasets.CocoDetection):
     def __init__(self, img_folder, ann_file, transforms, return_masks):
         super(CocoDetection, self).__init__(img_folder, ann_file)
         self._transforms = transforms
-        self.prepare = ConvertCocoPolysToMask(return_masks)
+        cats_map = {cat_id: new_id for new_id, cat_id in enumerate(self.coco.getCatIds())}
+        self.prepare = ConvertCocoPolysToMask(return_masks, cats_map)
 
     def __getitem__(self, idx):
         img, target = super(CocoDetection, self).__getitem__(idx)
@@ -48,8 +49,9 @@ def convert_coco_poly_to_mask(segmentations, height, width):
 
 
 class ConvertCocoPolysToMask(object):
-    def __init__(self, return_masks=False):
+    def __init__(self, return_masks=False, cats_map=None):
         self.return_masks = return_masks
+        self.cats_map = cats_map
 
     def __call__(self, image, target):
         w, h = image.size
@@ -68,7 +70,7 @@ class ConvertCocoPolysToMask(object):
         boxes[:, 0::2].clamp_(min=0, max=w)
         boxes[:, 1::2].clamp_(min=0, max=h)
 
-        classes = [obj["category_id"] for obj in anno]
+        classes = [self.cats_map[obj["category_id"]] for obj in anno]
         classes = torch.tensor(classes, dtype=torch.int64)
 
         if self.return_masks:
